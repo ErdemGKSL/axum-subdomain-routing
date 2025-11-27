@@ -147,13 +147,7 @@ where
                             parts.pop();
                         }
                         if parts.len() > 1 {
-                            target_subdomain = Some(
-                                parts[..parts.len() - 1]
-                                    .iter()
-                                    .cloned()
-                                    .collect::<Vec<_>>()
-                                    .join("."),
-                            );
+                            target_subdomain = Some(parts[..parts.len() - 1].to_vec().join("."));
                         }
                     }
                 }
