@@ -1,7 +1,19 @@
 [package]
 name = "axum-subdomain-routing"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2024"
+
+
+authors = ["Erdem Göksel <erdem.goksel.dev@gmail.com>"]
+description = "A high-performance subdomain routing library for Axum framework in Rust."
+license = "MIT"
+repository = "https://github.com/ErdemGKSL/axum-subdomain-routing"  # EDIT: Update with your actual GitHub username
+homepage = "https://github.com/ErdemGKSL/axum-subdomain-routing"  # EDIT: Update with your actual GitHub username
+documentation = "https://docs.rs/axum-subdomain-routing"
+readme = "README.md"
+keywords = ["axum", "subdomain", "routing", "rust", "web"]
+categories = ["web-programming", "network-programming"]
+
 
 [dependencies]
 axum = "0.8.7"
