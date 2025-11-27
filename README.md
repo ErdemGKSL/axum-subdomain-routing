@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-axum-subdomain-routing = "0.0.2"
+axum-subdomain-routing = "0.0.4"
 ```
 
 ## Usage
