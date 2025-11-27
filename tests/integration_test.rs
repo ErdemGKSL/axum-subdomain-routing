@@ -220,10 +220,7 @@ async fn test_domain_subdomains() {
     // Define the main app router (fallback)
     let app = Router::new()
         .route("/", get(|| async { "Hello from Main App!" }))
-        .layer(
-            SubdomainLayer::new()
-                .register("api", api_router),
-        );
+        .layer(SubdomainLayer::new().register("api", api_router));
 
     // Bind to a random port
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -341,10 +338,7 @@ async fn test_multiple_level_subdomains() {
     // Define the main app router (fallback)
     let app = Router::new()
         .route("/", get(|| async { "Hello from Main App!" }))
-        .layer(
-            SubdomainLayer::new()
-                .register("sub.api", sub_api_router),
-        );
+        .layer(SubdomainLayer::new().register("sub.api", sub_api_router));
 
     // Bind to a random port
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
