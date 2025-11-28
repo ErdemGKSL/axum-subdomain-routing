@@ -12,7 +12,8 @@ use tower::util::ServiceExt;
 use tower::{Layer, Service};
 
 lazy_static! {
-    static ref IP_REGEX: Regex = Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$").unwrap();
+    static ref IP_REGEX: Regex =
+        Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$").unwrap();
 }
 
 const KNOWN_TLDS: &[&str] = &[
