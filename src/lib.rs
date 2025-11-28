@@ -12,7 +12,7 @@ use tower::util::ServiceExt;
 use tower::{Layer, Service};
 
 lazy_static! {
-    static ref IP_REGEX: Regex = Regex::new(r"(\d+)\.(\d+)\.(\d+)\.(\d+)").unwrap();
+    static ref IP_REGEX: Regex = Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$").unwrap();
 }
 
 const KNOWN_TLDS: &[&str] = &[
@@ -28,6 +28,7 @@ pub struct SubdomainLayer {
     routes: Arc<HashMap<String, Router>>,
     strict: bool,
     known_hosts: Arc<Vec<String>>,
+    auto_detect_domain: bool,
 }
 
 impl SubdomainLayer {
@@ -37,6 +38,7 @@ impl SubdomainLayer {
             routes: Arc::new(HashMap::new()),
             strict: false,
             known_hosts: Arc::new(Vec::new()),
+            auto_detect_domain: true,
         }
     }
 
@@ -66,6 +68,14 @@ impl SubdomainLayer {
         self.known_hosts = Arc::new(hosts);
         self
     }
+
+    /// Enable or disable automatic domain detection.
+    ///
+    /// When enabled, the layer will attempt to automatically detect and strip known TLDs.
+    pub fn auto_detect_domain(mut self, enable: bool) -> Self {
+        self.auto_detect_domain = enable;
+        self
+    }
 }
 
 impl Default for SubdomainLayer {
@@ -82,6 +92,7 @@ impl<S> Layer<S> for SubdomainLayer {
             inner,
             routes: self.routes.clone(),
             strict: self.strict,
+            auto_detect_domain: self.auto_detect_domain,
             known_hosts: self.known_hosts.clone(),
         }
     }
@@ -93,6 +104,7 @@ pub struct SubdomainService<S> {
     inner: S,
     routes: Arc<HashMap<String, Router>>,
     strict: bool,
+    auto_detect_domain: bool,
     known_hosts: Arc<Vec<String>>,
 }
 
@@ -113,6 +125,7 @@ where
         let inner = self.inner.clone();
         let routes = self.routes.clone();
         let strict = self.strict;
+        let auto_detect_domain = self.auto_detect_domain;
         let known_hosts = self.known_hosts.clone();
 
         // Extract host header before moving req
@@ -137,7 +150,7 @@ where
                     }
                 }
 
-                if target_subdomain.is_none() {
+                if target_subdomain.is_none() && auto_detect_domain {
                     let host = IP_REGEX.replace_all(&host, "$1_$2_$3_$4");
                     let parts: Vec<&str> = host.split('.').collect();
                     if !parts.is_empty() {
