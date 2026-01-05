@@ -2,6 +2,7 @@ use axum::{Router, extract::Request, http::StatusCode, response::Response};
 use futures::future::BoxFuture;
 use lazy_static::lazy_static;
 use regex::Regex;
+use tracing::{debug, trace};
 use std::{
     collections::HashMap,
     convert::Infallible,
@@ -47,8 +48,10 @@ impl SubdomainLayer {
     ///
     /// The `subdomain` argument is matched against the extracted subdomain from the `Host` header.
     pub fn register<S: ToString>(mut self, subdomain: S, router: Router) -> Self {
+        let subdomain_str = subdomain.to_string();
+        debug!(subdomain = %subdomain_str, "Registering router for subdomain");
         let mut routes = (*self.routes).clone();
-        routes.insert(subdomain.to_string(), router);
+        routes.insert(subdomain_str, router);
         self.routes = Arc::new(routes);
         self
     }
@@ -58,6 +61,7 @@ impl SubdomainLayer {
     /// When strict checking is enabled, requests to unknown subdomains will return a 404 response
     /// instead of falling back to the main router.
     pub fn strict(mut self, strict: bool) -> Self {
+        debug!(strict = %strict, "Setting strict mode");
         self.strict = strict;
         self
     }
@@ -66,6 +70,7 @@ impl SubdomainLayer {
     ///
     /// If the host ends with one of these known hosts, the suffix is removed to extract the subdomain.
     pub fn known_hosts(mut self, hosts: Vec<String>) -> Self {
+        debug!(hosts = ?hosts, "Setting known hosts");
         self.known_hosts = Arc::new(hosts);
         self
     }
@@ -74,6 +79,7 @@ impl SubdomainLayer {
     ///
     /// When enabled, the layer will attempt to automatically detect and strip known TLDs.
     pub fn auto_detect_domain(mut self, enable: bool) -> Self {
+        debug!(auto_detect = %enable, "Setting auto-detect domain mode");
         self.auto_detect_domain = enable;
         self
     }
@@ -138,47 +144,66 @@ where
 
         Box::pin(async move {
             if let Some(host) = host {
+                debug!(host = %host, "Processing request for host");
                 let mut target_subdomain = None;
 
                 // Try known hosts
+                trace!(known_hosts = ?known_hosts.as_ref(), "Checking against known hosts");
                 for known in known_hosts.iter() {
                     if host.ends_with(known) {
+                        trace!(known_host = %known, "Host matches known host");
                         let remainder_len = host.len() - known.len();
                         if remainder_len > 0 && host.as_bytes()[remainder_len - 1] == b'.' {
-                            target_subdomain = Some(host[..remainder_len - 1].to_string());
+                            let subdomain = host[..remainder_len - 1].to_string();
+                            debug!(subdomain = %subdomain, known_host = %known, "Extracted subdomain from known host");
+                            target_subdomain = Some(subdomain);
                             break;
                         }
                     }
                 }
 
                 if target_subdomain.is_none() && auto_detect_domain {
+                    trace!("Attempting auto-detection of subdomain");
                     let host = IP_REGEX.replace_all(&host, "$1_$2_$3_$4");
                     let parts: Vec<&str> = host.split('.').collect();
+                    trace!(parts = ?parts, "Split host into parts");
                     if !parts.is_empty() {
                         let last = *parts.last().unwrap();
                         let mut parts = parts;
                         if KNOWN_TLDS.contains(&last) {
+                            trace!(tld = %last, "Detected known TLD");
                             parts.pop();
                         }
                         if parts.len() > 1 {
-                            target_subdomain = Some(parts[..parts.len() - 1].to_vec().join("."));
+                            let subdomain = parts[..parts.len() - 1].to_vec().join(".");
+                            debug!(subdomain = %subdomain, "Auto-detected subdomain");
+                            target_subdomain = Some(subdomain);
                         }
                     }
                 }
 
                 if let Some(sub) = target_subdomain {
                     if let Some(router) = routes.get(&sub) {
+                        debug!(subdomain = %sub, "Routing to registered subdomain router");
                         return router.clone().oneshot(req).await;
                     } else if strict {
+                        debug!(subdomain = %sub, "Subdomain not found, returning 404 (strict mode)");
                         let response = Response::builder()
                             .status(StatusCode::NOT_FOUND)
                             .body(axum::body::Body::empty())
                             .unwrap();
                         return Ok(response);
+                    } else {
+                        debug!(subdomain = %sub, "Subdomain not found, falling back to inner service");
                     }
+                } else {
+                    trace!("No subdomain detected");
                 }
+            } else {
+                trace!("No host header found in request");
             }
             // Fallback to inner service
+            trace!("Falling back to inner service");
             inner.oneshot(req).await
         })
     }

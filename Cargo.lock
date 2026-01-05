@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "axum-subdomain-routing"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "axum",
  "futures",
@@ -80,6 +80,7 @@ dependencies = [
  "reqwest",
  "tokio",
  "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -1331,7 +1332,19 @@ checksum = "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
 dependencies = [
  "log",
  "pin-project-lite",
+ "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
