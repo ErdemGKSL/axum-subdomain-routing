@@ -7,6 +7,7 @@ A Tower layer for Axum that enables subdomain-based routing in Rust web applicat
 - **Subdomain Routing**: Route requests based on the `Host` header subdomain
 - **Known Hosts Support**: Configure known host suffixes for proper subdomain extraction
 - **Strict Mode**: Optionally return 404 for unknown subdomains
+- **Host Source Control**: Use `Host` only or allow optional `X-Forwarded-Host` fallback
 - **Axum Compatible**: Seamlessly integrates with Axum's `Router`
 - **IP Address Handling**: Properly handles IP addresses in host headers
 
@@ -16,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-axum-subdomain-routing = "0.0.6"
+axum-subdomain-routing = "0.0.8"
 ```
 
 ## Usage
@@ -82,6 +83,19 @@ let layer = SubdomainLayer::new()
 ```
 
 In strict mode, requests to unknown subdomains will return a 404 response instead of falling back to the main router.
+Missing or malformed effective host values also return 404 in strict mode.
+
+#### Host Source
+
+By default, the layer only uses the `Host` header. You can opt into `X-Forwarded-Host` fallback:
+
+```rust
+use axum_subdomain_routing::{HostSource, SubdomainLayer};
+
+let layer = SubdomainLayer::new()
+    .host_source(HostSource::XForwardedHostFallback)
+    .register("api", api_router);
+```
 
 ## API Reference
 
@@ -95,6 +109,7 @@ The main layer struct for subdomain routing.
 - `register<S: ToString>(self, subdomain: S, router: Router) -> Self`: Registers a router for the specified subdomain.
 - `strict(self, strict: bool) -> Self`: Enables or disables strict subdomain checking.
 - `known_hosts(self, hosts: Vec<String>) -> Self`: Sets the list of known host suffixes.
+- `host_source(self, host_source: HostSource) -> Self`: Configures host resolution strategy.
 
 ### `SubdomainService<S>`
 

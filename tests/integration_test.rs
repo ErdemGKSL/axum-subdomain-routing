@@ -1,6 +1,17 @@
-use axum::{Router, routing::get};
-use axum_subdomain_routing::SubdomainLayer;
+use axum::{
+    Router,
+    body::{Body, to_bytes},
+    http::{HeaderValue, Request},
+    routing::get,
+};
+use axum_subdomain_routing::{HostSource, SubdomainLayer};
 use tokio::net::TcpListener;
+use tower::util::ServiceExt;
+
+async fn response_body_text(response: axum::response::Response) -> String {
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
 
 #[tokio::test]
 async fn test_subdomain_routing() {
@@ -375,4 +386,107 @@ async fn test_multiple_level_subdomains() {
     assert_eq!(resp.status(), 200);
     let text = resp.text().await.unwrap();
     assert_eq!(text, "Hello from Sub API!");
+}
+
+#[tokio::test]
+async fn test_strict_mode_missing_host_returns_404() {
+    let app = Router::new()
+        .route("/", get(|| async { "Hello from Main App!" }))
+        .layer(
+            SubdomainLayer::new()
+                .register("api", Router::new())
+                .strict(true),
+        );
+
+    let request = Request::builder().uri("/").body(Body::empty()).unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), 404);
+}
+
+#[tokio::test]
+async fn test_strict_mode_malformed_host_returns_404() {
+    let app = Router::new()
+        .route("/", get(|| async { "Hello from Main App!" }))
+        .layer(
+            SubdomainLayer::new()
+                .register("api", Router::new())
+                .strict(true),
+        );
+
+    let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request
+        .headers_mut()
+        .insert("Host", HeaderValue::from_bytes(&[0xFF, 0xFE]).unwrap());
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), 404);
+}
+
+#[tokio::test]
+async fn test_host_normalization_case_and_trailing_dot() {
+    let api_router = Router::new().route("/", get(|| async { "Hello from API!" }));
+    let app = Router::new()
+        .route("/", get(|| async { "Hello from Main App!" }))
+        .layer(SubdomainLayer::new().register("API", api_router));
+
+    let request = Request::builder()
+        .uri("/")
+        .header("Host", "API.EXAMPLE.COM.")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body = response_body_text(response).await;
+    assert_eq!(body, "Hello from API!");
+}
+
+#[tokio::test]
+async fn test_x_forwarded_host_fallback_is_configurable() {
+    let api_router = Router::new().route("/", get(|| async { "Hello from API!" }));
+
+    let host_only_app = Router::new()
+        .route("/", get(|| async { "Hello from Main App!" }))
+        .layer(
+            SubdomainLayer::new()
+                .register("api", api_router.clone())
+                .strict(true)
+                .host_source(HostSource::HostOnly),
+        );
+
+    let fallback_app = Router::new()
+        .route("/", get(|| async { "Hello from Main App!" }))
+        .layer(
+            SubdomainLayer::new()
+                .register("api", api_router)
+                .strict(true)
+                .host_source(HostSource::XForwardedHostFallback),
+        );
+
+    let mut host_only_request = Request::builder()
+        .uri("/")
+        .header("X-Forwarded-Host", "api.example.com")
+        .body(Body::empty())
+        .unwrap();
+    host_only_request
+        .headers_mut()
+        .insert("Host", HeaderValue::from_bytes(&[0xFF]).unwrap());
+
+    let host_only_response = host_only_app.oneshot(host_only_request).await.unwrap();
+    assert_eq!(host_only_response.status(), 404);
+
+    let mut fallback_request = Request::builder()
+        .uri("/")
+        .header("X-Forwarded-Host", "api.example.com")
+        .body(Body::empty())
+        .unwrap();
+    fallback_request
+        .headers_mut()
+        .insert("Host", HeaderValue::from_bytes(&[0xFF]).unwrap());
+
+    let fallback_response = fallback_app.oneshot(fallback_request).await.unwrap();
+    assert_eq!(fallback_response.status(), 200);
+    let body = response_body_text(fallback_response).await;
+    assert_eq!(body, "Hello from API!");
 }
